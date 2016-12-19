@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Конвертер валют</string>
+    <string name="lost_connection">Отсутствует интернет соединение.</string>
+    <string name="connection_error">Отсутствует возможность загрузить информацию. Проверьте интернет соединение.</string>
+    <string name="xml_error">Ошибка загрузки XML.</string>
+    <string name="set_sum">Введите сумму.</string>
+</resources>
