@@ -87,7 +87,6 @@ public class XmlParser {
         return new Entry(numcode, charcode, nominal, name , value);
     }
 
-    // Processes title tags in the feed.
     private String readNumcode(XmlPullParser parser) throws IOException, XmlPullParserException {
         parser.require(XmlPullParser.START_TAG, ns, "NumCode");
         String numcode = readText(parser);
@@ -95,7 +94,6 @@ public class XmlParser {
         return numcode;
     }
 
-    // Processes link tags in the feed.
     private String readCharcode(XmlPullParser parser) throws IOException, XmlPullParserException {
         parser.require(XmlPullParser.START_TAG, ns, "CharCode");
         String charcode = readText(parser);
@@ -103,7 +101,6 @@ public class XmlParser {
         return charcode;
     }
 
-    // Processes summary tags in the feed.
     private String readNominal(XmlPullParser parser) throws IOException, XmlPullParserException {
         parser.require(XmlPullParser.START_TAG, ns, "Nominal");
         String nominal = readText(parser);
@@ -111,7 +108,6 @@ public class XmlParser {
         return nominal;
     }
 
-    // For the tags title and summary, extracts their text values.
     private String readName(XmlPullParser parser) throws IOException, XmlPullParserException {
         parser.require(XmlPullParser.START_TAG, ns, "Name");
         String name = readText(parser);
@@ -119,7 +115,6 @@ public class XmlParser {
         return name;
     }
 
-    // For the tags title and summary, extracts their text values.
     private String readValue(XmlPullParser parser) throws IOException, XmlPullParserException {
         parser.require(XmlPullParser.START_TAG, ns, "Value");
         String value = readText(parser);
@@ -127,7 +122,6 @@ public class XmlParser {
         return value;
     }
 
-    // For the tags title and summary, extracts their text values.
     private String readText(XmlPullParser parser) throws IOException, XmlPullParserException {
         String result = "";
         if (parser.next() == XmlPullParser.TEXT) {
@@ -137,9 +131,6 @@ public class XmlParser {
         return result;
     }
 
-    // Skips tags the parser isn't interested in. Uses depth to handle nested tags. i.e.,
-    // if the next tag after a START_TAG isn't a matching END_TAG, it keeps going until it
-    // finds the matching END_TAG (as indicated by the value of "depth" being 0).
     private void skip(XmlPullParser parser) throws XmlPullParserException, IOException {
         if (parser.getEventType() != XmlPullParser.START_TAG) {
             throw new IllegalStateException();

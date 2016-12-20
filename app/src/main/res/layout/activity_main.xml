@@ -36,7 +36,7 @@
                 android:layout_height="wrap_content"
                 android:inputType="number"
                 android:ems="10"
-                android:id="@+id/et_quantity"
+                android:id="@+id/et_amount"
                 android:textColor="@color/colorBlack" />
 
             <TextView

@@ -1,8 +1,5 @@
 package ru.homeproduction.andrey.currencyconverter;
 
-import android.content.Context;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
@@ -16,36 +13,26 @@ import android.widget.Toast;
 
 import org.xmlpull.v1.XmlPullParserException;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
-    private EditText et_quantity;
+    private EditText et_amount;
     private TextView tv_result;
     private Button btn_calculate_sum;
     private Spinner spinner_start_valute,spinner_end_valute;
 
-    //Ссылка на xml файл.
     private static final String URL =
             "http://www.cbr.ru/scripts/XML_daily.asp";
 
-    List<XmlParser.Entry> entries = null;
-    FileInputStream InputStreamFromCache;
+    private List<XmlParser.Entry> entries = null;
 
-    //Value1 - value выбранной валюты из spinner_start_valute
-    //Value2 - value выбранной валюты из spinner_end_valute
-    //Value3 - введенная сумма в editText
-    //Value4 - конечный результат
-    private double value1,value2, value_sum, value_result;
+    private String amount, start_value, end_value, start_valute, end_valute;
+
+    private double value_result;
 
 
 
@@ -54,59 +41,35 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        et_quantity = (EditText) findViewById(R.id.et_quantity);
+        et_amount = (EditText) findViewById(R.id.et_amount);
         tv_result = (TextView) findViewById(R.id.tv_result);
         btn_calculate_sum = (Button) findViewById(R.id.btn_calculate_sum);
         spinner_start_valute = (Spinner) findViewById(R.id.spinner_start_valute);
         spinner_end_valute = (Spinner) findViewById(R.id.spinner_end_valute);
 
-        //В случае увеличения количества записей в xml, необходимо создать отдельный AsyncTask для
-        //этих вычислений, чтобы не блокировать главный поток.
         btn_calculate_sum.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
 
-
-
-
-                //Проверяем, есть ли информация в EditText
-                if(et_quantity.getText().toString().equals("")){
+                if(et_amount.getText().toString().equals("")){
                     Toast.makeText(getApplicationContext(), R.string.set_sum, Toast.LENGTH_SHORT).show();
                 }
                 else {
 
-                    //Получаем выбранные String из Spinner
-                    //Ищем в записи с соответствующими валютами
-                    //Получаем value данных записей
-                    //Выполняем математическое преобразование.
-                    //Выводим в соответствующем формате.
-                    String start_valute;
-                    String end_valute;
-                    String entry_name;
-                    String string_value1;
-                    String string_value2;
-
-
-
-                    value_sum = Double.parseDouble(et_quantity.getText().toString());
+                    amount = et_amount.getText().toString();
                     start_valute = spinner_start_valute.getSelectedItem().toString();
                     end_valute = spinner_end_valute.getSelectedItem().toString();
+
                     if (start_valute.equals(end_valute)) {
-
-                        tv_result.setText(String.format("%.2f", value_sum) + " " + start_valute);
-
+                        tv_result.setText(amount + " " + start_valute);
                     } else {
                         for (XmlParser.Entry entry : entries) {
-                            entry_name = entry.name;
-                            if (start_valute.equals(entry_name)) {
-                                string_value1 = entry.value.replace(',', '.');
-                                value1 = Double.parseDouble(string_value1);
-                            } else if (end_valute.equals(entry_name)) {
-                                string_value2 = entry.value.replace(',', '.');
-                                value2 = Double.parseDouble(string_value2);
+                            if (start_valute.equals(entry.name)) {
+                                start_value = entry.value.replace(',', '.');
+                            } else if (end_valute.equals(entry.name)) {
+                                end_value = entry.value.replace(',', '.');
                             }
                         }
-
-                        value_result = (value_sum * value1 / value2);
+                        value_result = Calculator.calculate(amount, start_value, end_value);
                         tv_result.setText(String.format("%.2f", value_result) + " " + end_valute);
                     }
                 }
@@ -120,174 +83,103 @@ public class MainActivity extends AppCompatActivity {
     public void onStart() {
         super.onStart();
 
-        boolean isConnected;
-
-        //Проверяем если активная сеть, если есть скачиваем xml файл. В случае отсутствия
-        //проверяем существует ли файл в кеше, если есть скачиваем данные из него, если нет
-        // блокируем кнопку и выводим сообщение об отсутствии интернет соединения.
-        ConnectivityManager cm =
-                (ConnectivityManager)getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
-
-        NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
-        File file = new File(getCacheDir(), "ExchangeRates.srl");
-
-
-        if(activeNetwork != null) {
-           isConnected = activeNetwork.isConnectedOrConnecting();
-        }
-        else{
-            isConnected = false;
-        }
-
-        if(isConnected){
+        if(NetworkUtil.getConnectivityStatus(getApplicationContext()) != 0) {
             new DownloadXmlTask().execute(URL);
         }
-        else if(file.exists()){
+        else if(FileCacheUtil.getFile(getApplicationContext()).exists()){
             new DownloadFromCache().execute();
         }
         else{
             btn_calculate_sum.setEnabled(false);
             Toast.makeText(getApplicationContext(), R.string.lost_connection, Toast.LENGTH_SHORT).show();
         }
-
     }
 
-    //AsyncTaks для загрузки XML файла по сети.
-    private class DownloadXmlTask extends AsyncTask<String, Void, String> {
+    //Все необходимое для загрузки данных по сети.
+    private class DownloadXmlTask extends AsyncTask<String, Void, List<String>> {
 
         @Override
-        protected String doInBackground(String... urls) {
+        protected List<String> doInBackground(String... urls) {
             try {
-                return loadXmlFromNetwork(urls[0]);
+                List<String> mList = new ArrayList<>();
+                for (XmlParser.Entry entry : loadXmlFromNetwork(URL)) {
+                    mList.add(entry.name);
+                }
+                return mList;
             } catch (IOException e) {
-                return getResources().getString(R.string.connection_error);
+                return null;
             } catch (XmlPullParserException e) {
-                return getResources().getString(R.string.xml_error);
+                return null;
             }
         }
 
         @Override
-        protected void onPostExecute(String result) {
+        protected void onPostExecute(List<String> mList) {
 
-            //Обновляем данные в spinners.Так как исходная и конечная валюта взята из одного документа
-            //устанавливаем один адаптер для 2 spinner.
-            String[] separated = result.split("//");
-            ArrayAdapter<String> spinnerArrayAdapter = new ArrayAdapter<String>(getApplicationContext(),   R.layout.spinner_layout, separated);
-            spinnerArrayAdapter.setDropDownViewResource(R.layout.spinner_dropdown_layout); // The drop down view
-            spinner_start_valute.setAdapter(spinnerArrayAdapter);
-            spinner_end_valute.setAdapter(spinnerArrayAdapter);
+            if(mList != null){
+                ArrayAdapter<String> spinnerArrayAdapter = new ArrayAdapter<>(getApplicationContext(),   R.layout.spinner_layout, mList);
+                spinnerArrayAdapter.setDropDownViewResource(R.layout.spinner_dropdown_layout);
+                spinner_start_valute.setAdapter(spinnerArrayAdapter);
+                spinner_end_valute.setAdapter(spinnerArrayAdapter);
+            }
         }
     }
 
-    private String loadXmlFromNetwork(String urlString) throws XmlPullParserException, IOException {
+    private List<XmlParser.Entry> loadXmlFromNetwork(String urlString) throws XmlPullParserException, IOException {
 
         InputStream stream = null;
         XmlParser xmlParser = new XmlParser();
-        String name = "";
-
-        File file = new File(getCacheDir(), "ExchangeRates.srl");
 
         try {
-            //Загружаем наш xml документ
-            stream = downloadUrl(urlString);
-            //Сохраняем его в cache
-            copyInputStreamToFile(stream, file);
-            //Производим повторную загрузку xml
-            stream = downloadUrl(urlString);
-            //Производим обработку.
+            stream = NetworkLoader.getInputStreamFromUrl(urlString);
+            FileCacheUtil.setStreamIntoFile(getApplicationContext(),stream);
+            stream = NetworkLoader.getInputStreamFromUrl(urlString);
             entries = xmlParser.parse(stream);
         } finally {
             if (stream != null) {
                  stream.close();
             }
         }
-
-        for (XmlParser.Entry entry : entries) {
-            name = name + entry.name +"//";
-        }
-        return name;
+        return entries;
     }
 
 
-    private InputStream downloadUrl(String urlString) throws IOException {
-        URL url = new URL(urlString);
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        conn.setReadTimeout(10000 /* milliseconds */);
-        conn.setConnectTimeout(15000 /* milliseconds */);
-        conn.setRequestMethod("GET");
-        conn.setDoInput(true);
-        conn.connect();
-        InputStream stream = conn.getInputStream();
-        return stream;
-    }
-
-
-    //Все необходимое для загрузки Валют из кеша.Копируем AsyncTask выше, за исключением того,
-    //что InputStream получаем из файла.
-    private class DownloadFromCache extends AsyncTask<String, Void, String> {
+    //Все необходимое для загрузки данных из Cache.
+    private class DownloadFromCache extends AsyncTask<Void, Void ,List<String>> {
 
         @Override
-        protected String doInBackground(String... strings) {
+        protected List<String> doInBackground(Void...arg0) {
             try {
-                return loadXmlFromCache();
+                List<String> mList = new ArrayList<>();
+                for (XmlParser.Entry entry : loadXmlFromCache()) {
+                    mList.add(entry.name);
+                }
+                return mList;
             } catch (IOException e) {
-                return getResources().getString(R.string.xml_error);
+                return null;
             } catch (XmlPullParserException e) {
-                return getResources().getString(R.string.xml_error);
+                return null;
             }
         }
 
         @Override
-        protected void onPostExecute(String result) {
+        protected void onPostExecute(List<String> mList) {
 
-            String[] separated = result.split("//");
-            ArrayAdapter<String> spinnerArrayAdapter = new ArrayAdapter<String>(getApplicationContext(),   R.layout.spinner_layout, separated);
-            spinnerArrayAdapter.setDropDownViewResource(R.layout.spinner_dropdown_layout);
-            spinner_start_valute.setAdapter(spinnerArrayAdapter);
-            spinner_end_valute.setAdapter(spinnerArrayAdapter);
+            if(mList != null){
+                ArrayAdapter<String> spinnerArrayAdapter = new ArrayAdapter<>(getApplicationContext(),   R.layout.spinner_layout, mList);
+                spinnerArrayAdapter.setDropDownViewResource(R.layout.spinner_dropdown_layout);
+                spinner_start_valute.setAdapter(spinnerArrayAdapter);
+                spinner_end_valute.setAdapter(spinnerArrayAdapter);
+            }
+
         }
     }
-    //Метод загрузки xml файла из кеша.
-    private String loadXmlFromCache() throws XmlPullParserException, IOException {
+
+    private List<XmlParser.Entry> loadXmlFromCache() throws XmlPullParserException, IOException {
 
         XmlParser xmlParser = new XmlParser();
-        String name = "";
-
-        try {
-            File file = new File(getCacheDir(), "ExchangeRates.srl");
-            InputStreamFromCache = new FileInputStream(file);
-            entries = xmlParser.parse(InputStreamFromCache);
-
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-        if (InputStreamFromCache != null) {
-            InputStreamFromCache.close();
-        }
+        entries = xmlParser.parse(FileCacheUtil.getStreamFromFile(getApplicationContext()));
+        return entries;
     }
-        for (XmlParser.Entry entry : entries) {
-            name = name + entry.name +"//";
-        }
-        return name;
-    }
-
-    //Для копирования входящего поток в файл.
-    private void copyInputStreamToFile( InputStream in, File file ) {
-        try {
-            OutputStream out = new FileOutputStream(file);
-            byte[] buf = new byte[10000];
-            int len;
-            while((len=in.read(buf))>0){
-                out.write(buf,0,len);
-            }
-            out.close();
-            in.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
 
 }
